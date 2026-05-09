@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.env/
+
+# Database and data files
+qdrant_storage/
+local_docs.pkl
+*.pkl
+
+# Tokens and keys
+Tokens.txt
+.env
+
+# Streamlit/OS specific
+.streamlit/
+.DS_Store
