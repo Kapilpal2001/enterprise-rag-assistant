@@ -2,7 +2,7 @@ import os
 import tempfile
 import pickle
 import streamlit as st
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader, UnstructuredPowerPointLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client.models import Distance, VectorParams
@@ -17,11 +17,29 @@ def load_local_documents():
 def process_uploaded_files(uploaded_files, db_client, embeddings):
     docs = []
     for uploaded_file in uploaded_files:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        file_extension = os.path.splitext(uploaded_file.name)[1].lower()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
             tmp.write(uploaded_file.getvalue())
             tmp_path = tmp.name
-        loader = PyPDFLoader(tmp_path)
-        docs.extend(loader.load())
+        
+        if file_extension == '.pdf':
+            loader = PyPDFLoader(tmp_path)
+        elif file_extension == '.txt':
+            loader = TextLoader(tmp_path, encoding='utf-8')
+        elif file_extension == '.docx':
+            loader = Docx2txtLoader(tmp_path)
+        elif file_extension == '.pptx':
+            loader = UnstructuredPowerPointLoader(tmp_path)
+        else:
+            st.warning(f"Unsupported file type: {file_extension}")
+            os.unlink(tmp_path)
+            continue
+            
+        try:
+            docs.extend(loader.load())
+        except Exception as e:
+            st.error(f"Error loading {uploaded_file.name}: {e}")
+            
         os.unlink(tmp_path)
     
     splits = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=50).split_documents(docs)

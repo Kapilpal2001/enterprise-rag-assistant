@@ -16,3 +16,6 @@ psutil
 langsmith
 rank_bm25
 flashrank
+docx2txt
+unstructured
+python-pptx

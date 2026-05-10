@@ -52,7 +52,7 @@ if "vectorstore" not in st.session_state:
         )
         st.sidebar.success("💾 Loaded existing database from disk!")
     else:
-        st.sidebar.info("📂 No existing database found. Please upload a PDF.")
+        st.sidebar.info("📂 No existing database found. Please upload a document.")
 
 # --- 4. DOCUMENT PROCESSING ---
 st.sidebar.header("2. Knowledge Base")
@@ -65,11 +65,11 @@ if st.sidebar.button("🗑️ Wipe Entire Brain"):
     time.sleep(1)
     st.rerun()
 
-uploaded_files = st.sidebar.file_uploader("Upload PDF", accept_multiple_files=True, type=['pdf'])
+uploaded_files = st.sidebar.file_uploader("Upload Documents", accept_multiple_files=True, type=['pdf', 'txt', 'docx', 'pptx'])
 
 if st.sidebar.button("Process Documents"):
     if uploaded_files:
-        with st.spinner("Analyzing PDF and adding to your Knowledge Base..."):
+        with st.spinner("Analyzing documents and adding to your Knowledge Base..."):
             st.session_state.vectorstore = process_uploaded_files(uploaded_files, db_client, embeddings)
             st.sidebar.success("✅ Added to Knowledge Base!")
     else:
@@ -94,7 +94,7 @@ if st.sidebar.button("Generate t-SNE Map"):
 # --- 5. UI INTERACTION & RAG ---
 st.header("5. Ask Your Assistant")
 
-data_source = st.radio("Select Knowledge Source:", ["PDF Documents", "Structured SQL Database"], horizontal=True)
+data_source = st.radio("Select Knowledge Source:", ["Local Documents", "Structured SQL Database"], horizontal=True)
 
 t_query = st.text_input("Type here:")
 a_query = st.audio_input("Or speak:")
@@ -111,14 +111,14 @@ elif a_query:
             st.error(f"Voice Error: {e}. Try typing your question instead!")
 
 if final_query:
-    if data_source == "PDF Documents" and "vectorstore" not in st.session_state:
-        st.error("Process your PDF first!")
+    if data_source == "Local Documents" and "vectorstore" not in st.session_state:
+        st.error("Process your documents first!")
     else:
         try:
-            if data_source == "PDF Documents":
+            if data_source == "Local Documents":
                 local_docs = load_local_documents()
                 if not local_docs:
-                    st.error("Local documents missing for BM25. Please re-upload your PDF.")
+                    st.error("Local documents missing for BM25. Please re-upload your documents.")
                     st.stop()
                 
                 with st.spinner("Executing Hybrid Search & Reranking..."):
