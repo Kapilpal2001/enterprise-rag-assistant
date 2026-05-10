@@ -8,6 +8,7 @@ from langchain_qdrant import QdrantVectorStore
 from engine import load_stable_engine, get_database_connection, setup_llm_and_groq
 from document_processor import process_uploaded_files, wipe_database, load_local_documents
 from rag_logic import get_answer
+from sql_logic import get_sql_answer
 from voice_utils import talk, transcribe_audio
 
 # Advanced features
@@ -92,6 +93,9 @@ if st.sidebar.button("Generate t-SNE Map"):
 
 # --- 5. UI INTERACTION & RAG ---
 st.header("5. Ask Your Assistant")
+
+data_source = st.radio("Select Knowledge Source:", ["PDF Documents", "Structured SQL Database"], horizontal=True)
+
 t_query = st.text_input("Type here:")
 a_query = st.audio_input("Or speak:")
 
@@ -107,19 +111,24 @@ elif a_query:
             st.error(f"Voice Error: {e}. Try typing your question instead!")
 
 if final_query:
-    if "vectorstore" not in st.session_state:
+    if data_source == "PDF Documents" and "vectorstore" not in st.session_state:
         st.error("Process your PDF first!")
     else:
         try:
-            local_docs = load_local_documents()
-            if not local_docs:
-                st.error("Local documents missing for BM25. Please re-upload your PDF.")
-                st.stop()
-            
-            with st.spinner("Executing Hybrid Search & Reranking..."):
-                # NO MORE LANGCHAIN RETRIEVERS! Direct function call.
-                ans, latency, contexts, tokens = get_answer(final_query, st.session_state.vectorstore, local_docs, llm)
-                st.success(f"**AI:** {ans}")
+            if data_source == "PDF Documents":
+                local_docs = load_local_documents()
+                if not local_docs:
+                    st.error("Local documents missing for BM25. Please re-upload your PDF.")
+                    st.stop()
+                
+                with st.spinner("Executing Hybrid Search & Reranking..."):
+                    # NO MORE LANGCHAIN RETRIEVERS! Direct function call.
+                    ans, latency, contexts, tokens = get_answer(final_query, st.session_state.vectorstore, local_docs, llm)
+                    st.success(f"**AI:** {ans}")
+            else:
+                with st.spinner("Executing Text-to-SQL Query..."):
+                    ans, latency, contexts, tokens = get_sql_answer(final_query, groq_client)
+                    st.success(f"**AI:** {ans}")
             
             # Observability Dashboard
             st.subheader("Observability Metrics")

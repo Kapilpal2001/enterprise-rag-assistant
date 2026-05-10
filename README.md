@@ -11,6 +11,7 @@ This system has been upgraded with a powerful suite of advanced RAG capabilities
 *   **🗺️ Vector Visualization**: Uses `scikit-learn` (t-SNE) and `plotly` to render an interactive 2D map of where your document chunks "live" in the semantic vector space.
 *   **🧠 Custom Hybrid Search**: Replaced standard LangChain retrievers with a highly optimized custom algorithm performing parallel Dense (Qdrant) and Sparse (BM25) searches.
 *   **🥇 FlashRank Reranking**: Automatically deduplicates and reranks hybrid search results using FlashRank to ensure the absolute most relevant context is sent to the LLM.
+*   **🗄️ Native Text-to-SQL**: Built-in capability to query structured SQLite databases natively using pure Python and LLM prompting, bypassing complex LangChain agents.
 *   **⏱️ Retrieval Latency & Cost Tracking**: Displays real-time database retrieval latency (in milliseconds) and precisely tracks the number of tokens consumed by the LLM per query.
 *   **💾 Memory Footprint Monitoring**: Integrates `psutil` to track and display active RAM usage directly in the Streamlit UI.
 *   **🧩 Modular Architecture**: The codebase is cleanly split into highly specialized modules (`engine.py`, `document_processor.py`, `rag_logic.py`, `voice_utils.py`, `visualization.py`, `monitoring.py`, and `evaluator.py`).
@@ -46,6 +47,7 @@ Retrieval-Augmented Generation (RAG) is a technique that enhances the accuracy a
 *   **🔊 Audio Responses**: Reads out the AI-generated responses automatically using `edge-tts` (Aria Neural Voice).
 *   **⚡ Blazing Fast Generation**: Powered by the Groq API for near-instantaneous LLM inference using LLaMA 3.1 8B.
 *   **💾 Persistent Local Storage**: Uses Qdrant for local vector storage. Your knowledge base persists across sessions so you don't have to re-upload PDFs unless you want to.
+*   **🔄 Dual Knowledge Sources**: Seamlessly toggle between querying unstructured PDF documents and a structured SQL database right from the UI.
 *   **🗑️ Brain Wipe Feature**: Easily clear the Qdrant database with a single click to start fresh.
 *   **📄 Multi-Document Support**: Upload and process multiple PDFs concurrently.
 
@@ -68,10 +70,10 @@ Retrieval-Augmented Generation (RAG) is a technique that enhances the accuracy a
 2.  The application processes PDFs -> Splits into chunks -> Generates Embeddings -> Saves to local **Qdrant Database**.
 3.  **User asks a question** via Text Input or Voice Recording.
 4.  If Voice is used, it's transcribed using **Groq Whisper API**.
-5.  The system executes a custom hybrid search (Qdrant + BM25) and uses **FlashRank** to rerank the combined results to find the **top 3 document chunks**.
-6.  The retrieved context + user query are sent to **Groq Llama 3.1 8B**.
-7.  The LLM generates a contextual answer.
-8.  The text answer is displayed on the UI alongside **Retrieval Latency** and **Token Cost**, and converted to audio via **edge-tts**.
+5.  Based on the selected **Knowledge Source**:
+    *   **PDF Documents**: The system executes a custom hybrid search (Qdrant + BM25) and uses **FlashRank** to rerank the combined results to find the **top 3 document chunks**. The context and query are sent to the LLM.
+    *   **SQL Database**: The system extracts the database schema, prompts the LLM to generate a SQL query, executes it locally via `sqlite3`, and passes the results to the LLM to formulate an answer.
+6.  The text answer is displayed on the UI alongside **Retrieval Latency** and **Token Cost**, and converted to audio via **edge-tts**.
 
 ## 🚀 Installation & Setup
 
