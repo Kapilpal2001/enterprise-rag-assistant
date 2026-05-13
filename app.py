@@ -9,6 +9,7 @@ from engine import load_stable_engine, get_database_connection, setup_llm_and_gr
 from document_processor import process_uploaded_files, wipe_database, load_local_documents
 from rag_logic import get_answer
 from sql_logic import get_sql_answer
+from unified_logic import get_unified_answer
 from voice_utils import talk, transcribe_audio
 
 # Advanced features
@@ -54,6 +55,19 @@ if "vectorstore" not in st.session_state:
     else:
         st.sidebar.info("📂 No existing database found. Please upload a document.")
 
+if "query_vectorstore" not in st.session_state:
+    from qdrant_client.models import VectorParams, Distance
+    if not db_client.collection_exists(collection_name="past_queries"):
+        db_client.create_collection(
+            collection_name="past_queries",
+            vectors_config=VectorParams(size=384, distance=Distance.COSINE)
+        )
+    st.session_state.query_vectorstore = QdrantVectorStore(
+        client=db_client,
+        collection_name="past_queries",
+        embedding=embeddings
+    )
+
 # --- 4. DOCUMENT PROCESSING ---
 st.sidebar.header("2. Knowledge Base")
 
@@ -94,7 +108,7 @@ if st.sidebar.button("Generate t-SNE Map"):
 # --- 5. UI INTERACTION & RAG ---
 st.header("5. Ask Your Assistant")
 
-data_source = st.radio("Select Knowledge Source:", ["Local Documents", "Structured SQL Database"], horizontal=True)
+data_source = "Combined Knowledge Base" # Replaced the radio button
 
 t_query = st.text_input("Type here:")
 a_query = st.audio_input("Or speak:")
@@ -111,30 +125,65 @@ elif a_query:
             st.error(f"Voice Error: {e}. Try typing your question instead!")
 
 if final_query:
-    if data_source == "Local Documents" and "vectorstore" not in st.session_state:
-        st.error("Process your documents first!")
+    if "vectorstore" not in st.session_state:
+        st.error("Please upload and process your documents first to fully enable the unified assistant.")
     else:
         try:
-            if data_source == "Local Documents":
-                local_docs = load_local_documents()
-                if not local_docs:
-                    st.error("Local documents missing for BM25. Please re-upload your documents.")
-                    st.stop()
-                
-                with st.spinner("Executing Hybrid Search & Reranking..."):
-                    # NO MORE LANGCHAIN RETRIEVERS! Direct function call.
-                    ans, latency, contexts, tokens = get_answer(final_query, st.session_state.vectorstore, local_docs, llm)
-                    st.success(f"**AI:** {ans}")
-            else:
-                with st.spinner("Executing Text-to-SQL Query..."):
-                    ans, latency, contexts, tokens = get_sql_answer(final_query, groq_client)
-                    st.success(f"**AI:** {ans}")
+            local_docs = load_local_documents()
+            if not local_docs:
+                st.error("Local documents missing for BM25. Please re-upload your documents.")
+                st.stop()
             
-            # Observability Dashboard
-            st.subheader("Observability Metrics")
-            col1, col2 = st.columns(2)
+            with st.spinner("Analyzing intent and searching knowledge bases..."):
+                ans, latency, contexts, tokens, evaluation, is_fallback = get_unified_answer(
+                    query=final_query, 
+                    vectorstore=st.session_state.vectorstore, 
+                    query_vectorstore=st.session_state.get("query_vectorstore"),
+                    local_docs=local_docs, 
+                    llm=llm, 
+                    groq_client=groq_client
+                )
+                
+                # Save successful query for future fallbacks
+                if not is_fallback and evaluation and evaluation.get('is_faithful', False):
+                    if "query_vectorstore" in st.session_state:
+                        st.session_state.query_vectorstore.add_texts([final_query])
+                        
+                st.success(f"**AI:** {ans}")
+            
+            # --- NEW: ADVANCED METRICS DASHBOARD ---
+            st.subheader("Advanced RAG Metrics")
+            
+            # Safety Status
+            if evaluation is None:
+                st.error("🚨 Query Blocked: Failed Safety Check.")
+                st.stop()
+            else:
+                st.success("✅ Safety Check Passed")
+            
+            # Metrics Columns
+            col1, col2, col3 = st.columns(3)
             col1.metric("Retrieval Latency", f"{latency*1000:.2f} ms")
             col2.metric("Cost Tracker (Tokens)", f"{tokens}")
+            
+            # Faithfulness Critic Score
+            faith_score = evaluation.get('score', 0)
+            is_faithful = evaluation.get('is_faithful', False)
+            reasoning = evaluation.get('reasoning', '')
+            
+            col3.metric(
+                "Faithfulness Score", 
+                f"{faith_score}/100", 
+                "Faithful" if is_faithful else "Unfaithful",
+                delta_color="normal" if is_faithful else "inverse"
+            )
+            
+            with st.expander("Critic Reasoning"):
+                st.write(reasoning)
+                
+            with st.expander("View Retrieved Contexts (Docs/SQL/Web)"):
+                for i, ctx in enumerate(contexts):
+                    st.markdown(f"**Context {i+1}:**\n```\n{ctx}\n```")
             
             st.session_state.last_qa = {
                 "question": final_query,

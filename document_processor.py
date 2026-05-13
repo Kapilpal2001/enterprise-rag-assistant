@@ -65,5 +65,7 @@ def process_uploaded_files(uploaded_files, db_client, embeddings):
 def wipe_database(db_client):
     if db_client.collection_exists(collection_name="my_documents"):
         db_client.delete_collection(collection_name="my_documents")
+    if db_client.collection_exists(collection_name="past_queries"):
+        db_client.delete_collection(collection_name="past_queries")
     if os.path.exists("local_docs.pkl"):
         os.remove("local_docs.pkl")

@@ -3,7 +3,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from rank_bm25 import BM25Okapi
 from flashrank import Ranker, RerankRequest
 
-def get_answer(query, vectorstore, local_docs, llm):
+def retrieve_documents(query, vectorstore, local_docs):
     start_time = time.time()
     
     # 1. DENSE SEARCH (Semantic meaning via Qdrant)
@@ -28,6 +28,11 @@ def get_answer(query, vectorstore, local_docs, llm):
     reranked_results = ranker.rerank(rerank_request)[:3] # Keep only the absolute best 3
     
     retrieval_latency = time.time() - start_time
+    
+    return reranked_results, retrieval_latency
+
+def get_answer(query, vectorstore, local_docs, llm):
+    reranked_results, retrieval_latency = retrieve_documents(query, vectorstore, local_docs)
     
     if len(reranked_results) == 0:
         return "I could not find any relevant information in the document.", retrieval_latency, [], 0

@@ -20,8 +20,8 @@ def get_db_schema(db_path='company_data.db'):
     conn.close()
     return "\n".join(schema_info)
 
-def get_sql_answer(query, groq_client, db_path='company_data.db'):
-    """Native Text-to-SQL implementation using pure Python and Groq LLM."""
+def execute_sql_query(query, groq_client, db_path='company_data.db'):
+    """Generates and executes SQL, returning raw data."""
     start_time = time.time()
     
     # 1. Get Schema
@@ -85,8 +85,23 @@ Rules:
                 })
                 print(f"⚠️ SQL Error Caught (Attempt {attempt}): {e}. Retrying autonomously...")
         
-        # 4. Generate Final Answer
-        answer_prompt = f"""
+        retrieval_latency = time.time() - start_time
+        return db_results, raw_sql, retrieval_latency, total_tokens
+        
+    except Exception as e:
+        return f"Error: {str(e)}", "", time.time() - start_time, 0
+
+def get_sql_answer(query, groq_client, db_path='company_data.db'):
+    """Legacy wrapper for isolated SQL mode."""
+    start_time = time.time()
+    
+    db_results, raw_sql, retrieval_latency, total_tokens = execute_sql_query(query, groq_client, db_path)
+    
+    if isinstance(db_results, str) and db_results.startswith("Error:"):
+        return f"An error occurred while querying the database: {db_results}", retrieval_latency, [], total_tokens
+
+    # 4. Generate Final Answer
+    answer_prompt = f"""
 The user asked: "{query}"
 The SQL query executed was: {raw_sql}
 The database returned the following results: {db_results}
@@ -94,6 +109,7 @@ The database returned the following results: {db_results}
 Formulate a concise, friendly, and natural human-sounding answer based on these results.
 Do not mention the SQL query in your response unless necessary.
 """
+    try:
         final_response = groq_client.chat.completions.create(
             model="llama3-70b-8192",
             messages=[{"role": "user", "content": answer_prompt}],
@@ -101,11 +117,8 @@ Do not mention the SQL query in your response unless necessary.
         )
         
         final_answer = final_response.choices[0].message.content.strip()
-        
-        retrieval_latency = time.time() - start_time
         tokens = total_tokens + final_response.usage.total_tokens
         
         return final_answer, retrieval_latency, [f"SQL Query Executed: {raw_sql}\nDatabase Results: {db_results}"], tokens
-        
     except Exception as e:
-        return f"An error occurred while querying the database: {str(e)}", time.time() - start_time, [], 0
+        return f"An error occurred while generating the answer: {str(e)}", time.time() - start_time, [], total_tokens
