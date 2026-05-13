@@ -1,18 +1,18 @@
+import pandas as pd
 import os
 import tempfile
 import pickle
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader, UnstructuredPowerPointLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_qdrant import QdrantVectorStore
 from qdrant_client.models import Distance, VectorParams
-
 def load_local_documents():
     docs_path = "local_docs.pkl"
     if os.path.exists(docs_path):
         with open(docs_path, "rb") as f:
             return pickle.load(f)
     return []
+
 
 def process_uploaded_files(uploaded_files, db_client, embeddings):
     docs = []
@@ -21,7 +21,7 @@ def process_uploaded_files(uploaded_files, db_client, embeddings):
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
             tmp.write(uploaded_file.getvalue())
             tmp_path = tmp.name
-        
+
         if file_extension == '.pdf':
             loader = PyPDFLoader(tmp_path)
         elif file_extension == '.txt':
@@ -34,33 +34,55 @@ def process_uploaded_files(uploaded_files, db_client, embeddings):
             st.warning(f"Unsupported file type: {file_extension}")
             os.unlink(tmp_path)
             continue
-            
+
         try:
             docs.extend(loader.load())
         except Exception as e:
             st.error(f"Error loading {uploaded_file.name}: {e}")
-            
+
         os.unlink(tmp_path)
-    
+
     splits = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=50).split_documents(docs)
-    
+
     with open("local_docs.pkl", "wb") as f:
         pickle.dump(splits, f)
-    
+
     if not db_client.collection_exists(collection_name="my_documents"):
         db_client.create_collection(
             collection_name="my_documents",
             vectors_config=VectorParams(size=384, distance=Distance.COSINE)
         )
-        
+
     vector_store = QdrantVectorStore(
         client=db_client,
         collection_name="my_documents",
         embedding=embeddings
     )
-    
+
     vector_store.add_documents(splits)
     return vector_store
+
+def process_structured_data(uploaded_file, db_path='custom_data.db'):
+    """Ingest a CSV or Excel file into a SQLite database.
+    The table name is derived from the filename (without extension).
+    """
+    import pandas as pd
+    import sqlite3
+    import os
+    filename = uploaded_file.name
+    ext = os.path.splitext(filename)[1].lower()
+    if ext == '.csv':
+        df = pd.read_csv(uploaded_file)
+    elif ext in ['.xlsx', '.xls']:
+        df = pd.read_excel(uploaded_file)
+    else:
+        raise ValueError(f"Unsupported structured file type: {ext}")
+    table_name = os.path.splitext(os.path.basename(filename))[0]
+    conn = sqlite3.connect(db_path)
+    df.to_sql(table_name, conn, if_exists='replace', index=False)
+    conn.close()
+    return f"Loaded structured data into table '{table_name}'."
+
 
 def wipe_database(db_client):
     if db_client.collection_exists(collection_name="my_documents"):

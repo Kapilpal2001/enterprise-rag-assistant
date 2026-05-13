@@ -6,7 +6,7 @@ import tempfile
 from langchain_qdrant import QdrantVectorStore
 
 from engine import load_stable_engine, get_database_connection, setup_llm_and_groq
-from document_processor import process_uploaded_files, wipe_database, load_local_documents
+from document_processor import process_uploaded_files, wipe_database, load_local_documents, process_structured_data
 from rag_logic import get_answer
 from sql_logic import get_sql_answer
 from unified_logic import get_unified_answer
@@ -79,15 +79,43 @@ if st.sidebar.button("🗑️ Wipe Entire Brain"):
     time.sleep(1)
     st.rerun()
 
-uploaded_files = st.sidebar.file_uploader("Upload Documents", accept_multiple_files=True, type=['pdf', 'txt', 'docx', 'pptx'])
+# 1. UNSTRUCTURED DATA (PDFs, Docs, PPTs)
+uploaded_docs = st.sidebar.file_uploader(
+    "Upload Documents (PDF, DOCX, TXT, PPTX)", 
+    accept_multiple_files=True, 
+    type=['pdf', 'docx', 'txt', 'pptx']
+)
 
 if st.sidebar.button("Process Documents"):
-    if uploaded_files:
-        with st.spinner("Analyzing documents and adding to your Knowledge Base..."):
-            st.session_state.vectorstore = process_uploaded_files(uploaded_files, db_client, embeddings)
-            st.sidebar.success("✅ Added to Knowledge Base!")
+    if uploaded_docs:
+        with st.spinner("Analyzing documents and adding to Knowledge Base..."):
+            st.session_state.vectorstore = process_uploaded_files(uploaded_docs, db_client, embeddings)
+            st.sidebar.success("✅ Documents Added!")
     else:
-        st.sidebar.warning("Upload a file first.")
+        st.sidebar.warning("Upload a document first.")
+
+st.sidebar.divider() # Adds a nice visual line between the two sections
+
+# 2. STRUCTURED DATA (CSVs, Excel)
+uploaded_structured_file = st.sidebar.file_uploader(
+    "Upload Structured Data (CSV/Excel)",
+    accept_multiple_files=False,
+    type=['csv', 'xlsx', 'xls']
+)
+
+# --- 5. STRUCTURED DATA PROCESSING ---
+if st.sidebar.button("Process Structured Data"):
+    if uploaded_structured_file:
+        with st.spinner("Loading structured data..."):
+            try:
+                msg = process_structured_data(uploaded_structured_file)
+                st.session_state.active_db = "custom_data.db"
+                st.sidebar.success(msg)
+            except Exception as e:
+                st.error(f"Failed to load structured data: {e}")
+    else:
+        st.sidebar.warning("Upload a CSV or Excel file first.")
+
 
 # --- NEW: SYSTEM FOOTPRINT ---
 st.sidebar.header("3. System Footprint")
@@ -135,13 +163,15 @@ if final_query:
                 st.stop()
             
             with st.spinner("Analyzing intent and searching knowledge bases..."):
+                current_db = st.session_state.get("active_db", "company_data.db")
                 ans, latency, contexts, tokens, evaluation, is_fallback = get_unified_answer(
                     query=final_query, 
                     vectorstore=st.session_state.vectorstore, 
                     query_vectorstore=st.session_state.get("query_vectorstore"),
                     local_docs=local_docs, 
                     llm=llm, 
-                    groq_client=groq_client
+                    groq_client=groq_client,
+                    db_path=current_db
                 )
                 
                 # Save successful query for future fallbacks
