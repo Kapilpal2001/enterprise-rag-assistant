@@ -31,7 +31,7 @@ def grade_faithfulness(answer, contexts, groq_client):
     
     try:
         response = groq_client.chat.completions.create(
-            model="llama3-8b-8192", # Using 8b for faster grading
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": eval_prompt}],
             temperature=0,
             response_format={"type": "json_object"}

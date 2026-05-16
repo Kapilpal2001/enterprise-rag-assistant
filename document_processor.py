@@ -6,6 +6,9 @@ import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader, UnstructuredPowerPointLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from qdrant_client.models import Distance, VectorParams
+from langchain_qdrant import QdrantVectorStore
+
+
 def load_local_documents():
     docs_path = "local_docs.pkl"
     if os.path.exists(docs_path):

@@ -18,7 +18,7 @@ def check_safety(query, groq_client):
     
     try:
         response = groq_client.chat.completions.create(
-            model="llama3-8b-8192", # Using the smaller 8b model for ultra-fast safety checks
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": safety_prompt}],
             temperature=0,
             max_tokens=10
